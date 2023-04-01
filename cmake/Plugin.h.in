@@ -1,0 +1,21 @@
+#pragma once
+
+#include <string_view>
+
+namespace Plugin
+{
+	using namespace std::literals;
+
+	inline constexpr REL::Version VERSION
+	{
+		// clang-format off
+		@PROJECT_VERSION_MAJOR@u,
+		@PROJECT_VERSION_MINOR@u,
+		@PROJECT_VERSION_PATCH@u,
+		// clang-format on
+	};
+	
+	inline constexpr auto VERSION_STRING = "v@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@"sv;
+
+	inline constexpr auto NAME = "@PROJECT_NAME@"sv;
+}
