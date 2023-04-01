@@ -130,16 +130,16 @@ namespace SAR
 	{
 		// Hook loading function
 		// This is shared for all types of loading (journal, console, auto-load) as well as calls by other mods into the Load function.
-		REL::Relocation<std::uintptr_t> vTable(REL::ID{ 255912 });
+		REL::Relocation<std::uintptr_t> vTable(REL::ID{ 306359 });
 		_LoadGame = vTable.write_vfunc(0x11, &LoadGame_Hook);
 
 		// Hook returning to main menu while in-game
-		SKSE::GetTrampoline().write_branch<5>(REL::ID{ 53287 }.address(), FadeThenMainMenuCallback_Hook);
+		SKSE::GetTrampoline().write_branch<5>(REL::ID{ 17554 }.address(), FadeThenMainMenuCallback_Hook);
 
 		if (autoLoadMode || skipIntro)
 		{
 			// Disable startup movie when auto-loading to speed things up a bit
-			REL::safe_fill(REL::ID{ 36548 }.address() + 0x121, 0x90, 5);
+			REL::safe_fill(REL::ID{ 35549 }.address() + 0xB4, 0x90, 5);
 		}
 	}
 
@@ -229,17 +229,31 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 }
 
 extern "C" {
-	DLLEXPORT constinit auto SKSEPlugin_Version = []() {
-		SKSE::PluginVersionData v;
+	//DLLEXPORT constinit auto SKSEPlugin_Version = []() {
+	//	SKSE::PluginVersionData v;
 
-		v.PluginVersion(Plugin::VERSION);
-		v.PluginName(Plugin::NAME);
+	//	v.PluginVersion(Plugin::VERSION);
+	//	v.PluginName(Plugin::NAME);
 
-		v.UsesAddressLibrary(true);
-		v.CompatibleVersions({ SKSE::RUNTIME_LATEST });
+	//	v.UsesAddressLibrary(true);
+	//	v.CompatibleVersions({ SKSE::RUNTIME_LATEST });
 
-		return v;
-	}();
+	//	return v;
+	//}();
+
+	DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
+	{
+		a_info->infoVersion = SKSE::PluginInfo::kVersion;
+		a_info->name = Plugin::NAME.data();
+		a_info->version = Plugin::VERSION[0];
+
+		if (a_skse->RuntimeVersion() < SKSE::RUNTIME_1_5_39)
+		{
+			SKSE::log::critical("Unsupported runtime version {}", a_skse->RuntimeVersion().string());
+			return false;
+		}
+		return true;
+	}
 
 	DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
 	{
