@@ -17,7 +17,7 @@ namespace SAR
 	std::string autoLoadFileName{};
 	uint32_t loadingCounter = 0;
 
-	using LoadGame_t = decltype(&RE::BSWin32SaveDataSystemUtility::Unk_11);
+	using LoadGame_t = void (RE::BSWin32SaveDataSystemUtility::*)(const char*, std::uint64_t, void*);
 	REL::Relocation<LoadGame_t> _LoadGame;
 
 	const std::string getSKSECommandLine()
@@ -212,7 +212,10 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 		{
 			RE::BGSSaveLoadManager* manager = RE::BGSSaveLoadManager::GetSingleton();
 			assert(manager);
-			if (!manager->Load(SAR::autoLoadFileName.c_str(), false))
+
+			using LoadImpl_t = bool (RE::BGSSaveLoadManager::*)(const char*, std::int32_t, std::uint32_t, bool);
+			static REL::Relocation<LoadImpl_t> LoadImpl{ REL::ID{ 35728 } };
+			if (!LoadImpl(manager, SAR::autoLoadFileName.c_str(), -1, 0, false))
 			{
 				spdlog::error("Loading save failed. Setting main menu to visible.");
 				RE::UI* ui = RE::UI::GetSingleton();
@@ -220,7 +223,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 				{
 					mainMenu->uiMovie->SetVisible(true);
 				}
-				RE::DebugNotification("Error loading save.");
+				RE::SendHUDMessage::ShowHUDMessage("Error loading save.");
 			}
 		}
 	}
@@ -229,14 +232,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 }
 
 extern "C" {
-	DLLEXPORT constinit auto SKSEPlugin_Version = []() {
+	DLLEXPORT SKSE::PluginVersionData SKSEPlugin_Version = []() {
 		SKSE::PluginVersionData v;
 
 		v.PluginVersion(Plugin::VERSION);
 		v.PluginName(Plugin::NAME);
-
-		v.UsesAddressLibrary(true);
-		v.CompatibleVersions({ SKSE::RUNTIME_LATEST });
+		v.UsesUpdatedStructs();
+		v.UsesAddressLibrary();
+		v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_6_1170, SKSE::RUNTIME_SSE_1_6_1179 });
 
 		return v;
 	}();
