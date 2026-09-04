@@ -256,7 +256,7 @@ extern "C" {
 		log->flush_on(spdlog::level::trace);
 
 		spdlog::set_default_logger(std::move(log));
-		spdlog::set_pattern("%g(%#): [%^%l%$] %v", spdlog::pattern_time_type::local);
+		spdlog::set_pattern("%s(%#): [%^%l%$] %v", spdlog::pattern_time_type::local);
 
 		// Init mod
 		SKSE::log::info("{} v{} - {}", Plugin::NAME.data(), Plugin::VERSION_STRING.data(), __TIMESTAMP__);
@@ -268,7 +268,7 @@ extern "C" {
 		}
 
 		SKSE::AllocTrampoline((size_t)2 << 4);
-		SKSE::Init(a_skse);
+		SKSE::Init(a_skse, false);
 
 		// Register SKSE Messaging interface
 		auto messaging = SKSE::GetMessagingInterface();
@@ -283,16 +283,16 @@ extern "C" {
 		}
 
 		// Check if we are auto-loading and set up the variables
-		char fileName[1024];
-		size_t len = GetEnvironmentVariableA("SKYRIM_AUTOLOAD_FILE_NAME", fileName, 0);
-		GetEnvironmentVariableA("SKYRIM_AUTOLOAD_FILE_NAME", fileName, len);
-		if (GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+		uint32_t len = GetEnvironmentVariableA("SKYRIM_AUTOLOAD_FILE_NAME", nullptr, 0);
+		if (len == 0)
 		{
 			SKSE::log::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is not set. Proceeding normally.");
 		}
-		else if (len)
+		else
 		{
-			std::string fileNameStr{ fileName, len - 1 };
+			std::string fileNameStr(len, '\0');
+			fileNameStr.resize(GetEnvironmentVariableA("SKYRIM_AUTOLOAD_FILE_NAME", fileNameStr.data(), len));
+
 			if (fileNameStr == "$$$_MAIN_MENU_$$$")
 			{
 				SKSE::log::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is set to $$$_MAIN_MENU_$$$. Skipping intro and proceeding normally.");

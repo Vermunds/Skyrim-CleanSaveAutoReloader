@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <Shlobj.h>
 #include <filesystem>
+#include <vector>
 
 #pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
@@ -58,19 +59,23 @@ void WaitForGame(int a_pid)
 	}
 }
 
-std::optional<std::filesystem::path> log_directory()
+bool GetLogDirectory(std::filesystem::path& a_path)
 {
 	wchar_t* buffer{ nullptr };
-	const auto result = SHGetKnownFolderPath(::FOLDERID_Documents, KNOWN_FOLDER_FLAG::KF_FLAG_DEFAULT, nullptr, std::addressof(buffer));
+	const HRESULT result = SHGetKnownFolderPath(::FOLDERID_Documents, KNOWN_FOLDER_FLAG::KF_FLAG_DEFAULT, nullptr, std::addressof(buffer));
 	std::unique_ptr<wchar_t[], decltype(&CoTaskMemFree)> knownPath(buffer, CoTaskMemFree);
 	if (!knownPath || result != S_OK)
 	{
-		return std::nullopt;
+		return false;
 	}
 
 	std::filesystem::path path = knownPath.get();
-	path /= "My Games/Skyrim Special Edition/SKSE"sv;
-	return path;
+	path /= "My Games"sv;
+	path /= std::filesystem::exists("steam_api64.dll") ? "Skyrim Special Edition" : "Skyrim Special Edition GOG";
+	path /= "SKSE"sv;
+
+	a_path = path;
+	return true;
 }
 
 // Process command line function with support for quoted values
@@ -130,7 +135,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// Calculate the width of the label text
 			HDC hdc = GetDC(hLabel);
 			SIZE size;
-			GetTextExtentPoint32(hdc, labelText, strlen(labelText), &size);
+			GetTextExtentPoint32(hdc, labelText, static_cast<int32_t>(strlen(labelText)), &size);
 			ReleaseDC(hLabel, hdc);
 
 			// Calculate the center position of the label
@@ -180,8 +185,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
 	// Logger setup
-	assert(log_directory().has_value());
-	auto path = log_directory().value() / std::filesystem::path("SkyrimAutoReload_Helper.log"s);
+	std::filesystem::path logDirectory;
+	if (!GetLogDirectory(logDirectory))
+	{
+		return 1;
+	}
+
+	auto path = logDirectory / std::filesystem::path("SkyrimAutoReloaderHelper.log"s);
 	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
 	auto log = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
 
@@ -189,7 +199,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	log->flush_on(spdlog::level::trace);
 
 	spdlog::set_default_logger(std::move(log));
-	spdlog::set_pattern("%g(%#): [%^%l%$] %v"s, spdlog::pattern_time_type::local);
+	spdlog::set_pattern("%s(%#): [%^%l%$] %v"s, spdlog::pattern_time_type::local);
 
     // Parse command line arguments
 	std::string cmdLine(lpCmdLine);
