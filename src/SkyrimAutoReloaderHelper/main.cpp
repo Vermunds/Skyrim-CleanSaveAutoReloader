@@ -144,8 +144,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			// Create the label and progress bar controls
 			const char* labelText = "Skyrim is reloading. Please wait...";
-			hLabel = CreateWindowExA(0, "STATIC", labelText, WS_VISIBLE | WS_CHILD, ScaleForDpi(10, dpi), ScaleForDpi(10, dpi), ScaleForDpi(200, dpi), ScaleForDpi(20, dpi), hWnd, nullptr, nullptr, nullptr);
-			hProgress = CreateWindowExA(0, PROGRESS_CLASS, nullptr, WS_VISIBLE | WS_CHILD | PBS_MARQUEE, ScaleForDpi(10, dpi), ScaleForDpi(50, dpi), ScaleForDpi(360, dpi), ScaleForDpi(20, dpi), hWnd, nullptr, nullptr, nullptr);
+			hLabel = CreateWindowExA(0, "STATIC", labelText, WS_VISIBLE | WS_CHILD, ScaleForDpi(MARGIN, dpi), ScaleForDpi(MARGIN, dpi), ScaleForDpi(200, dpi), ScaleForDpi(PROGRESS_HEIGHT, dpi), hWnd, nullptr, nullptr, nullptr);
+			hProgress = CreateWindowExA(0, PROGRESS_CLASS, nullptr, WS_VISIBLE | WS_CHILD | PBS_MARQUEE, ScaleForDpi(MARGIN, dpi), ScaleForDpi(50, dpi), ScaleForDpi(PROGRESS_WIDTH, dpi), ScaleForDpi(PROGRESS_HEIGHT, dpi), hWnd, nullptr, nullptr, nullptr);
 			SendMessage(hProgress, PBM_SETMARQUEE, TRUE, 0);
 
 			// Controls default to the old bitmap system font, use the same font as the rest of the UI instead
@@ -236,6 +236,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
 	// Logger setup
 	std::filesystem::path logDirectory;
 	if (!GetLogDirectory(logDirectory))
@@ -322,9 +324,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	}
 
 	spdlog::info("pid = {}, commandLine = {}", pid, commandLine);
-
-	// Without this the window is rendered at 96 DPI and stretched by the OS, which blurs it
-	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
 	INITCOMMONCONTROLSEX icc;
 	icc.dwSize = sizeof(INITCOMMONCONTROLSEX);
