@@ -1,5 +1,5 @@
-#include <Windows.h>
 #include <Shlobj.h>
+#include <Windows.h>
 #include <filesystem>
 #include <vector>
 
@@ -7,7 +7,7 @@
 
 HANDLE newProcessHandle = 0;
 
-void RestartGame(std::string & a_commandLine, std::string a_fileName)
+void RestartGame(std::string& a_commandLine, std::string a_fileName)
 {
 	// Create startup information and process information structs
 	STARTUPINFO startupInfo{};
@@ -255,7 +255,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	spdlog::set_default_logger(std::move(log));
 	spdlog::set_pattern("%s(%#): [%^%l%$] %v"s, spdlog::pattern_time_type::local);
 
-    // Parse command line arguments
+	// Parse command line arguments
 	std::string cmdLine(lpCmdLine);
 	std::vector<std::string> args = ProcessCommandLine(cmdLine);
 
@@ -271,6 +271,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	int pid = 0;
 	std::string commandLine;
 	std::string fileName;
+	bool silent = false;
 
 	for (size_t i = 0; i < args.size(); i += 2)
 	{
@@ -295,6 +296,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		else if (args[i] == "--commandline")
 		{
 			commandLine = args[i + 1];
+		}
+		else if (args[i] == "--silent")
+		{
+			silent = args[i + 1] == "1";
 		}
 		else if (args[i] == "--filename")
 		{
@@ -325,35 +330,40 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	spdlog::info("pid = {}, commandLine = {}", pid, commandLine);
 
-	INITCOMMONCONTROLSEX icc;
-	icc.dwSize = sizeof(INITCOMMONCONTROLSEX);
-	icc.dwICC = ICC_PROGRESS_CLASS;
-	InitCommonControlsEx(&icc);
-
-	// Register the window class
-	WNDCLASS wc = { 0 };
-	wc.lpfnWndProc = WndProc;
-	wc.hInstance = hInstance;
-	wc.hbrBackground = (HBRUSH)(COLOR_WINDOW);
-	wc.lpszClassName = "SkyrimAutoReloader";
-	RegisterClassA(&wc);
-
-	// Get the screen dimensions
-	int32_t screenWidth = GetSystemMetrics(SM_CXSCREEN);
-	int32_t screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-	// Calculate the center coordinates of the window
-	uint32_t dpi = GetDpiForSystem();
-	int32_t windowWidth = ScaleForDpi(400, dpi);
-	int32_t windowHeight = ScaleForDpi(120, dpi);
-	int32_t windowX = (screenWidth - windowWidth) / 2;
-	int32_t windowY = (screenHeight - windowHeight) / 2;
-
-	// Create the window
-	HWND wnd = CreateWindowExA(0, "SkyrimAutoReloader", "Skyrim Special Edition", WS_POPUPWINDOW | WS_CAPTION | WS_SYSMENU, windowX, windowY, windowWidth, windowHeight, nullptr, nullptr, hInstance, nullptr);
-	if (!wnd)
+	// In silent mode nothing is drawn, so the window and everything it needs is never created
+	HWND wnd = nullptr;
+	if (!silent)
 	{
-		return 1;
+		INITCOMMONCONTROLSEX icc;
+		icc.dwSize = sizeof(INITCOMMONCONTROLSEX);
+		icc.dwICC = ICC_PROGRESS_CLASS;
+		InitCommonControlsEx(&icc);
+
+		// Register the window class
+		WNDCLASS wc = { 0 };
+		wc.lpfnWndProc = WndProc;
+		wc.hInstance = hInstance;
+		wc.hbrBackground = (HBRUSH)(COLOR_WINDOW);
+		wc.lpszClassName = "SkyrimAutoReloader";
+		RegisterClassA(&wc);
+
+		// Get the screen dimensions
+		int32_t screenWidth = GetSystemMetrics(SM_CXSCREEN);
+		int32_t screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+		// Calculate the center coordinates of the window
+		uint32_t dpi = GetDpiForSystem();
+		int32_t windowWidth = ScaleForDpi(400, dpi);
+		int32_t windowHeight = ScaleForDpi(120, dpi);
+		int32_t windowX = (screenWidth - windowWidth) / 2;
+		int32_t windowY = (screenHeight - windowHeight) / 2;
+
+		// Create the window
+		wnd = CreateWindowExA(0, "SkyrimAutoReloader", "Skyrim Special Edition", WS_POPUPWINDOW | WS_CAPTION | WS_SYSMENU, windowX, windowY, windowWidth, windowHeight, nullptr, nullptr, hInstance, nullptr);
+		if (!wnd)
+		{
+			return 1;
+		}
 	}
 
 	WaitForGame(pid);
@@ -362,6 +372,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	{
 		spdlog::error("Restarting game failed!");
 		return 1;
+	}
+
+	// Without a window there is nothing to keep up to date, the game is on its way already
+	if (silent)
+	{
+		spdlog::info("Silent mode, exiting without showing the status window.");
+		CloseHandle(newProcessHandle);
+		return 0;
 	}
 
 	// Show the window and enter the message loop

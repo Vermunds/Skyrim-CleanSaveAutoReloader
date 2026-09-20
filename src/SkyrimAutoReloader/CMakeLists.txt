@@ -6,7 +6,11 @@ project(
 
 set(SOURCES
 	"main.cpp"
+	"ModConfigUI.cpp"
+	"ModConfigUI.h"
 	"PCH.h"
+	"Settings.cpp"
+	"Settings.h"
  )
 
 source_group(
@@ -14,14 +18,12 @@ source_group(
 	FILES ${SOURCES}
 )
 
-set(VERSION_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/Plugin.h")
+set(VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/include/Version.h")
 configure_file(
-	"${CSAR_ROOT_DIR}/cmake/Plugin.h.in"
+	"${CSAR_ROOT_DIR}/cmake/Version.h.in"
 	"${VERSION_HEADER}"
 	@ONLY
 )
-
-source_group("src" FILES "${VERSION_HEADER}")
 
 configure_file(
 	"${CSAR_ROOT_DIR}/cmake/version.rc.in"
@@ -42,6 +44,7 @@ add_library(${PROJECT_NAME}
 target_include_directories(
 	${PROJECT_NAME}
 	PRIVATE
+		${CMAKE_CURRENT_BINARY_DIR}/include
 		${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -52,6 +55,7 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
+		ModConfigUI
 )
 
 target_link_libraries(

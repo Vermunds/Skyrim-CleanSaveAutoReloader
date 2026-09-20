@@ -1,4 +1,9 @@
-#include <string>
+#include "ModConfigUI.h"
+#include "Settings.h"
+#include "Version.h"
+
+#include <ModConfigUI/Localization.h>
+
 #include <Windows.h>
 
 const std::map<DWORD, std::string_view> priorityLevels = {
@@ -71,7 +76,7 @@ namespace SAR
 	}
 
 	void RestartGame(const std::string& a_fileName)
-	{	
+	{
 		spdlog::info("Restart requested. Filename: {}", a_fileName);
 
 		// Build command line arguments
@@ -83,6 +88,11 @@ namespace SAR
 		if (!a_fileName.empty())
 		{
 			commandLine << " --filename \"" << a_fileName << "\"";
+		}
+
+		if (Settings::GetSingleton()->silentReload)
+		{
+			commandLine << " --silent 1";
 		}
 
 		// Create startup information and process information structs
@@ -112,7 +122,7 @@ namespace SAR
 
 	void LoadGame_Hook(RE::BSWin32SaveDataSystemUtility* a_this, const char* a_fileName, std::uint64_t a_unk1, void* a_unk2)
 	{
-		if (loadingCounter > 1) // This is incremented to 1 before main menu
+		if (loadingCounter > 1 && Settings::GetSingleton()->modActive)  // This is incremented to 1 before main menu
 		{
 			// a_fileName contains the full path to the file
 			std::filesystem::path path{ a_fileName };
@@ -121,9 +131,21 @@ namespace SAR
 		return _LoadGame(a_this, a_fileName, a_unk1, a_unk2);
 	}
 
-	void FadeThenMainMenuCallback_Hook(void* a_this, char a_unk1)
+	// The scalar deleting destructor of the callback the game runs once the fade to the main menu is done.
+	// It returns the object it was given, and the low bit of the flags asks it to free the object as well.
+	using FadeThenMainMenuCallback_t = void* (*)(void*, char);
+	REL::Relocation<FadeThenMainMenuCallback_t> _FadeThenMainMenuCallback;
+
+	void* FadeThenMainMenuCallback_Hook(void* a_this, char a_flags)
 	{
-		return RestartGame(""s);
+		if (!Settings::GetSingleton()->modActive)
+		{
+			return _FadeThenMainMenuCallback(a_this, a_flags);
+		}
+
+		// The process is on its way out, so the object is deliberately left alone.
+		RestartGame(""s);
+		return a_this;
 	}
 
 	void InstallHook()
@@ -134,9 +156,9 @@ namespace SAR
 		_LoadGame = vTable.write_vfunc(0x11, &LoadGame_Hook);
 
 		// Hook returning to main menu while in-game
-		SKSE::GetTrampoline().write_branch<5>(REL::ID{ 53287 }.address(), FadeThenMainMenuCallback_Hook);
+		_FadeThenMainMenuCallback = SKSE::GetTrampoline().write_branch<5>(REL::ID{ 53287 }.address(), FadeThenMainMenuCallback_Hook);
 
-		if (autoLoadMode || skipIntro)
+		if ((autoLoadMode || skipIntro) && Settings::GetSingleton()->skipIntroMovie)
 		{
 			// Disable startup movie when auto-loading to speed things up a bit
 			REL::safe_fill(REL::ID{ 36548 }.address() + 0x121, 0x90, 5);
@@ -146,7 +168,6 @@ namespace SAR
 	class UIEventHandler : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
 	public:
-
 		// Menu event handler to count loading screens, in case the game was not started by loading a save (eg. new game was started or the user coc'd from the main menu).
 		// Also hides the main menu in case we are auto-loading a save.
 		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_dispatcher) override
@@ -170,7 +191,7 @@ namespace SAR
 			if (a_event->menuName == RE::LoadingMenu::MENU_NAME)
 			{
 				++loadingCounter;
-				if (loadingCounter > 1) // This is incremented to 1 before main menu
+				if (loadingCounter > 1)  // This is incremented to 1 before main menu
 				{
 					spdlog::info("Game loaded. Removing MenuOpenCloseEvent sink.");
 					ui->RemoveEventSink<RE::MenuOpenCloseEvent>(this);
@@ -187,8 +208,8 @@ namespace SAR
 		}
 
 	private:
-		UIEventHandler(){};
-		~UIEventHandler(){};
+		UIEventHandler() {};
+		~UIEventHandler() {};
 		UIEventHandler(const UIEventHandler&) = delete;
 		UIEventHandler& operator=(const UIEventHandler&) = delete;
 	};
@@ -198,45 +219,52 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 {
 	switch (a_msg->type)
 	{
-	case SKSE::MessagingInterface::kInputLoaded:
-	{
-		RE::UI* ui = RE::UI::GetSingleton();
-		assert(ui);
-
-		ui->AddEventSink(SAR::UIEventHandler::GetSingleton());
-	}
-	break;
-	case SKSE::MessagingInterface::kDataLoaded:
-	{
-		if (SAR::autoLoadMode)
+	case SKSE::MessagingInterface::kPostLoad:
 		{
-			RE::BGSSaveLoadManager* manager = RE::BGSSaveLoadManager::GetSingleton();
-			assert(manager);
+			SAR::InstallModConfigUI();
+		}
+		break;
+	case SKSE::MessagingInterface::kInputLoaded:
+		{
+			RE::UI* ui = RE::UI::GetSingleton();
+			assert(ui);
 
-			using LoadImpl_t = bool (RE::BGSSaveLoadManager::*)(const char*, std::int32_t, std::uint32_t, bool);
-			static REL::Relocation<LoadImpl_t> LoadImpl{ REL::ID{ 35728 } };
-			if (!LoadImpl(manager, SAR::autoLoadFileName.c_str(), -1, 0, false))
+			ui->AddEventSink(SAR::UIEventHandler::GetSingleton());
+		}
+		break;
+	case SKSE::MessagingInterface::kDataLoaded:
+		{
+			if (SAR::autoLoadMode)
 			{
-				spdlog::error("Loading save failed. Setting main menu to visible.");
-				RE::UI* ui = RE::UI::GetSingleton();
-				if (RE::MainMenu* mainMenu = static_cast<RE::MainMenu*>(ui->GetMenu(RE::MainMenu::MENU_NAME).get()))
+				RE::BGSSaveLoadManager* manager = RE::BGSSaveLoadManager::GetSingleton();
+				assert(manager);
+
+				using LoadImpl_t = bool (RE::BGSSaveLoadManager::*)(const char*, std::int32_t, std::uint32_t, bool);
+				static REL::Relocation<LoadImpl_t> LoadImpl{ REL::ID{ 35728 } };
+				if (!LoadImpl(manager, SAR::autoLoadFileName.c_str(), -1, 0, false))
 				{
-					mainMenu->uiMovie->SetVisible(true);
+					spdlog::error("Loading save failed. Setting main menu to visible.");
+					RE::UI* ui = RE::UI::GetSingleton();
+					if (RE::MainMenu* mainMenu = static_cast<RE::MainMenu*>(ui->GetMenu(RE::MainMenu::MENU_NAME).get()))
+					{
+						mainMenu->uiMovie->SetVisible(true);
+					}
+					RE::SendHUDMessage::ShowHUDMessage(ModConfigUI::Localization::Get("$CSAR_ErrorLoadingSave"));
 				}
-				RE::SendHUDMessage::ShowHUDMessage("Error loading save.");
 			}
 		}
-	}
-	break;
+		break;
 	}
 }
 
-extern "C" {
+extern "C"
+{
 	DLLEXPORT SKSE::PluginVersionData SKSEPlugin_Version = []() {
 		SKSE::PluginVersionData v;
 
-		v.PluginVersion(Plugin::VERSION);
-		v.PluginName(Plugin::NAME);
+		v.PluginVersion(REL::Version{ Version::MAJOR, Version::MINOR, Version::PATCH, 0 });
+		v.PluginName(Version::NAME);
+		v.AuthorName(Version::AUTHOR);
 		v.UsesUpdatedStructs();
 		v.UsesAddressLibrary();
 		v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_6_1170, SKSE::RUNTIME_SSE_1_6_1179 });
@@ -248,7 +276,7 @@ extern "C" {
 	{
 		// Create logger
 		assert(SKSE::log::log_directory().has_value());
-		auto path = SKSE::log::log_directory().value() / std::filesystem::path(Plugin::NAME.data() + ".log"s);
+		auto path = SKSE::log::log_directory().value() / std::filesystem::path(Version::NAME.data() + ".log"s);
 		auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
 		auto log = std::make_shared<spdlog::logger>("global log", std::move(sink));
 
@@ -259,7 +287,7 @@ extern "C" {
 		spdlog::set_pattern("%s(%#): [%^%l%$] %v", spdlog::pattern_time_type::local);
 
 		// Init mod
-		SKSE::log::info("{} v{} - {}", Plugin::NAME.data(), Plugin::VERSION_STRING.data(), __TIMESTAMP__);
+		SKSE::log::info("{} v{} -({})", Version::FORMATTED_NAME, Version::STRING, __TIMESTAMP__);
 
 		if (a_skse->IsEditor())
 		{
@@ -282,6 +310,8 @@ extern "C" {
 			return false;
 		}
 
+		SAR::LoadSettings();
+
 		// Check if we are auto-loading and set up the variables
 		uint32_t len = GetEnvironmentVariableA("SKYRIM_AUTOLOAD_FILE_NAME", nullptr, 0);
 		if (len == 0)
@@ -297,7 +327,6 @@ extern "C" {
 			{
 				SKSE::log::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is set to $$$_MAIN_MENU_$$$. Skipping intro and proceeding normally.");
 				SAR::skipIntro = true;
-
 			}
 			else
 			{
