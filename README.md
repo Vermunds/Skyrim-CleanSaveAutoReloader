@@ -15,6 +15,9 @@ The mod ships two components, both installed into `Data/SKSE/Plugins`:
 
 The helper is required because the game cannot relaunch itself while it is still shutting down. Both files must be present for the mod to work.
 
+## Configuration
+The settings can be changed in-game, in the settings menu of either SKSE Menu Framework or Fuzz's Legally Intelligible Core Kit, or in `Data/SKSE/Plugins/SkyrimAutoReloader.ini`. Changes made in the menu are saved to the same file.
+
 ## Download
 Available on [Nexusmods](https://www.nexusmods.com/skyrimspecialedition/mods/88219).
 
