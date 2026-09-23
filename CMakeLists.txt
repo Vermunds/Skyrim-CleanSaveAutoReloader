@@ -1,6 +1,6 @@
 project(
 	SkyrimAutoReloader 				 	 	 # Sets the name of the project, and stores it in the variable PROJECT_NAME.
-	VERSION 1.0.0						 # Project version.
+	VERSION 1.1.0						 # Project version.
 	LANGUAGES CXX						 # Selects which programming languages are needed to build the project.
 )
 
