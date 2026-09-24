@@ -4,13 +4,24 @@
 #include <RE/Skyrim.h>
 #include <REL/Relocation.h>
 #include <SKSE/SKSE.h>
-
-#include <spdlog/sinks/basic_file_sink.h>
-#ifndef NDEBUG
-#	include <spdlog/sinks/msvc_sink.h>
-#endif
 #pragma warning(pop)
 
 using namespace std::literals;
+
+namespace logger
+{
+	template <class... T>
+	using trace = REX::TRACE<T...>;
+	template <class... T>
+	using debug = REX::DEBUG<T...>;
+	template <class... T>
+	using info = REX::INFO<T...>;
+	template <class... T>
+	using warn = REX::WARN<T...>;
+	template <class... T>
+	using error = REX::ERROR<T...>;
+	template <class... T>
+	using critical = REX::CRITICAL<T...>;
+}
 
 #define DLLEXPORT __declspec(dllexport)

@@ -4,6 +4,8 @@
 
 #include <ModConfigUI/Localization.h>
 
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <Windows.h>
 
 const std::map<DWORD, std::string_view> priorityLevels = {
@@ -77,7 +79,7 @@ namespace SAR
 
 	void RestartGame(const std::string& a_fileName)
 	{
-		spdlog::info("Restart requested. Filename: {}", a_fileName);
+		logger::info("Restart requested. Filename: {}", a_fileName);
 
 		// Build command line arguments
 		std::stringstream commandLine;
@@ -112,11 +114,11 @@ namespace SAR
 			// Set quitGame flag
 			RE::Main::GetSingleton()->quitGame = true;
 
-			spdlog::info("New process created: {}", commandLine.str());
+			logger::info("New process created: {}", commandLine.str());
 		}
 		else
 		{
-			spdlog::error("Failed to create process. Command line arguments: {}", commandLine.str());
+			logger::error("Failed to create process. Command line arguments: {}", commandLine.str());
 		}
 	}
 
@@ -153,15 +155,15 @@ namespace SAR
 		// Hook loading function
 		// This is shared for all types of loading (journal, console, auto-load) as well as calls by other mods into the Load function.
 		REL::Relocation<std::uintptr_t> vTable(REL::ID{ 255912 });
-		_LoadGame = vTable.write_vfunc(0x11, &LoadGame_Hook);
+		_LoadGame = vTable.write_vfunc(0x17, &LoadGame_Hook);
 
 		// Hook returning to main menu while in-game
-		_FadeThenMainMenuCallback = SKSE::GetTrampoline().write_branch<5>(REL::ID{ 53287 }.address(), FadeThenMainMenuCallback_Hook);
+		_FadeThenMainMenuCallback = REL::GetTrampoline().write_jmp<5>(REL::ID{ 53287 }.address(), FadeThenMainMenuCallback_Hook);
 
 		if ((autoLoadMode || skipIntro) && Settings::GetSingleton()->skipIntroMovie)
 		{
 			// Disable startup movie when auto-loading to speed things up a bit
-			REL::safe_fill(REL::ID{ 36548 }.address() + 0x121, 0x90, 5);
+			REL::WriteSafeFill(REL::ID{ 36548 }.address() + 0x121, 0x90, 5);
 		}
 	}
 
@@ -193,7 +195,7 @@ namespace SAR
 				++loadingCounter;
 				if (loadingCounter > 1)  // This is incremented to 1 before main menu
 				{
-					spdlog::info("Game loaded. Removing MenuOpenCloseEvent sink.");
+					logger::info("Game loaded. Removing MenuOpenCloseEvent sink.");
 					ui->RemoveEventSink<RE::MenuOpenCloseEvent>(this);
 				}
 			}
@@ -243,7 +245,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 				static REL::Relocation<LoadImpl_t> LoadImpl{ REL::ID{ 35728 } };
 				if (!LoadImpl(manager, SAR::autoLoadFileName.c_str(), -1, 0, false))
 				{
-					spdlog::error("Loading save failed. Setting main menu to visible.");
+					logger::error("Loading save failed. Setting main menu to visible.");
 					RE::UI* ui = RE::UI::GetSingleton();
 					if (RE::MainMenu* mainMenu = static_cast<RE::MainMenu*>(ui->GetMenu(RE::MainMenu::MENU_NAME).get()))
 					{
@@ -267,46 +269,38 @@ extern "C"
 		v.AuthorName(Version::AUTHOR);
 		v.UsesUpdatedStructs();
 		v.UsesAddressLibrary();
-		v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_6_1170, SKSE::RUNTIME_SSE_1_6_1179 });
+		v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_7_104 });
 
 		return v;
 	}();
 
-	DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
+	DLLEXPORT bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse)
 	{
-		// Create logger
-		assert(SKSE::log::log_directory().has_value());
-		auto path = SKSE::log::log_directory().value() / std::filesystem::path(Version::NAME.data() + ".log"s);
-		auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path.string(), true);
-		auto log = std::make_shared<spdlog::logger>("global log", std::move(sink));
+		// Init mod, CommonLib creates the logger
+		SKSE::InitInfo initInfo{};
+		initInfo.logLevel = REX::ELogLevel::Trace;
+		initInfo.logPattern = "%s(%#): [%^%l%$] %v";
+		initInfo.trampoline = true;
+		initInfo.trampolineSize = (size_t)2 << 4;
+		SKSE::Init(a_skse, initInfo);
 
-		log->set_level(spdlog::level::trace);
-		log->flush_on(spdlog::level::trace);
-
-		spdlog::set_default_logger(std::move(log));
-		spdlog::set_pattern("%s(%#): [%^%l%$] %v", spdlog::pattern_time_type::local);
-
-		// Init mod
-		SKSE::log::info("{} v{} -({})", Version::FORMATTED_NAME, Version::STRING, __TIMESTAMP__);
+		logger::info("{} v{} -({})", Version::FORMATTED_NAME, Version::STRING, __TIMESTAMP__);
 
 		if (a_skse->IsEditor())
 		{
-			SKSE::log::critical("Loaded in editor, marking as incompatible!");
+			logger::critical("Loaded in editor, marking as incompatible!");
 			return false;
 		}
-
-		SKSE::AllocTrampoline((size_t)2 << 4);
-		SKSE::Init(a_skse, false);
 
 		// Register SKSE Messaging interface
 		auto messaging = SKSE::GetMessagingInterface();
 		if (messaging->RegisterListener("SKSE", MessageHandler))
 		{
-			SKSE::log::info("Messaging interface registration successful.");
+			logger::info("Messaging interface registration successful.");
 		}
 		else
 		{
-			SKSE::log::critical("Messaging interface registration failed.");
+			logger::critical("Messaging interface registration failed.");
 			return false;
 		}
 
@@ -316,7 +310,7 @@ extern "C"
 		uint32_t len = GetEnvironmentVariableA("SKYRIM_AUTOLOAD_FILE_NAME", nullptr, 0);
 		if (len == 0)
 		{
-			SKSE::log::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is not set. Proceeding normally.");
+			logger::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is not set. Proceeding normally.");
 		}
 		else
 		{
@@ -325,12 +319,12 @@ extern "C"
 
 			if (fileNameStr == "$$$_MAIN_MENU_$$$")
 			{
-				SKSE::log::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is set to $$$_MAIN_MENU_$$$. Skipping intro and proceeding normally.");
+				logger::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is set to $$$_MAIN_MENU_$$$. Skipping intro and proceeding normally.");
 				SAR::skipIntro = true;
 			}
 			else
 			{
-				SKSE::log::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is set. Auto-loading file: {}", fileNameStr);
+				logger::info("Environment variable SKYRIM_AUTOLOAD_FILE_NAME is set. Auto-loading file: {}", fileNameStr);
 				SAR::autoLoadMode = true;
 				SAR::autoLoadFileName = fileNameStr;
 			}

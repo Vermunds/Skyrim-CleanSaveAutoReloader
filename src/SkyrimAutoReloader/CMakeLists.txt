@@ -49,19 +49,16 @@ target_include_directories(
 )
 
 # Dependencies
-find_package(spdlog REQUIRED CONFIG)
 target_link_libraries(
 	${PROJECT_NAME}
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
-		spdlog::spdlog
 		ModConfigUI
 )
 
 target_link_libraries(
 	"${PROJECT_NAME}"
 	PUBLIC
-		spdlog::spdlog
 		Version.lib
 )
 
