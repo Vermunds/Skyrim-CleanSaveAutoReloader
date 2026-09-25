@@ -6,6 +6,7 @@ project(
 
 set(CSAR_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(FORMATTED_NAME "Clean Save Auto-Reloader")
+set(LICENSE "GPL-3.0-or-later WITH Modding Exception")
 set(AUTHOR "Vermunds")
 
 add_subdirectory("src/SkyrimAutoReloaderHelper")
